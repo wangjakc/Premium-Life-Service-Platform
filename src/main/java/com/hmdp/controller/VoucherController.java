@@ -46,7 +46,7 @@ public class VoucherController {
 
 
     /**
-     * 查询店铺的优惠券列表
+     * 查询店铺的【秒杀】优惠券列表
      * @param shopId 店铺id
      * @return 优惠券列表
      */

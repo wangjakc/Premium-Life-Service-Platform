@@ -5,13 +5,12 @@ spring:
     name: hmdp
   datasource:
     driver-class-name: com.mysql.jdbc.Driver
-    url: jdbc:mysql://127.0.0.1:3306/hmdp?useSSL=false&serverTimezone=UTC
+    url: jdbc:mysql://127.0.0.1:3306/hmdp?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true&useSSL=false
     username: root
-    password: 123
+    password: 123456
   redis:
-    host: 192.168.150.101
+    host: localhost
     port: 6379
-    password: 123321
     lettuce:
       pool:
         max-active: 10
@@ -27,3 +26,12 @@ logging:
     com.hmdp: debug
   pattern:
     dateformat: mm:ss.SSS
+
+# 【秒杀优惠券信息多级缓存改造】本地缓存的配置项(刷新时间、过期时间)、Redis缓存的过期时间
+hmdp:
+  cache:
+    voucher-list:
+      mode: mysql
+      refresh-after-write: 5s
+      expire-after-write: 10m
+      redis-ttl: 30m

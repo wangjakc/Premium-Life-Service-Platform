@@ -60,10 +60,11 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
 
     private static final ExecutorService SECKILL_ORDER_EXECUTOR = Executors.newSingleThreadExecutor();
 
-    @PostConstruct
+    // TODO:一开始拿到项目时,需要注释掉这一段代码才能正常启动运行
+    /*@PostConstruct
     private void init() {
         SECKILL_ORDER_EXECUTOR.submit(new VoucherOrderHandler());
-    }
+    }*/
 
     private class VoucherOrderHandler implements Runnable {
 
