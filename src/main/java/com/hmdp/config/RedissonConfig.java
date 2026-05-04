@@ -8,13 +8,14 @@ import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class RedissonConfig {
-
     @Bean
-    public RedissonClient redissonClient(){
-        // 配置
-        Config config = new Config();
-        config.useSingleServer().setAddress("redis://127.0.0.1:6379");
+    public RedissonClient redisson() {
         // 创建RedissonClient对象
+        Config config = new Config();
+        config.useSingleServer().setAddress("redis://192.168.100.128:6379").setPassword("123321");
+
         return Redisson.create(config);
     }
+
+
 }
