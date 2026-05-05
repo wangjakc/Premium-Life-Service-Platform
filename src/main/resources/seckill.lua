@@ -9,24 +9,26 @@ local orderId = ARGV[3]
 -- 2.数据key
 -- 2.1.库存key
 local stockKey = 'seckill:stock:' .. voucherId
--- 2.2.订单key
+-- 2.2.一人一单hash key: seckill:order:{voucherId}
 local orderKey = 'seckill:order:' .. voucherId
 
 -- 3.脚本业务
 -- 3.1.判断库存是否充足 get stockKey
 if(tonumber(redis.call('get', stockKey)) <= 0) then
-    -- 3.2.库存不足，返回1
+    -- 库存不足，返回1
     return 1
 end
--- 3.2.判断用户是否下单 SISMEMBER orderKey userId
-if(redis.call('sismember', orderKey, userId) == 1) then
-    -- 3.3.存在，说明是重复下单，返回2
+
+-- 3.2.判断用户是否下单（Hash结构）
+if(redis.call('hexists', orderKey, userId) == 1) then
+    -- 存在，说明是重复下单，返回2
     return 2
 end
--- 3.4.扣库存 incrby stockKey -1
+
+-- 3.3.扣库存
 redis.call('incrby', stockKey, -1)
--- 3.5.下单（保存用户）sadd orderKey userId
-redis.call('sadd', orderKey, userId)
--- 3.6.发送消息到队列中， XADD stream.orders * k1 v1 k2 v2 ...
-redis.call('xadd', 'stream.orders', '*', 'userId', userId, 'voucherId', voucherId, 'id', orderId)
+
+-- 3.4.保存一人一单（Hash结构，field为userId，value为orderId）
+redis.call('hset', orderKey, userId, orderId)
+
 return 0
