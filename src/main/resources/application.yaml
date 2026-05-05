@@ -51,3 +51,6 @@ hmdp:
       redis-ttl: 30m
       # 逻辑过期时间,用于解决缓存击穿问题(Redis Key永不过期,数据携带逻辑过期时间)
       logical-expire-time: 10m
+  order:
+    timeout-minutes: 15  # 订单超时时间（分钟）
+

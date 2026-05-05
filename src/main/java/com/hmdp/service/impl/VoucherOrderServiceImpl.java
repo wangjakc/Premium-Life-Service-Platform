@@ -9,6 +9,8 @@ import com.hmdp.service.ISeckillVoucherService;
 import com.hmdp.service.IVoucherOrderService;
 import com.hmdp.utils.UserHolder;
 import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RBlockingQueue;
+import org.redisson.api.RedissonClient;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
@@ -19,6 +21,7 @@ import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
 import java.util.Collections;
+import java.util.concurrent.TimeUnit;
 
 /**
  * <p>
@@ -44,16 +47,31 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     @Resource
     private Snowflake snowflake;
 
+    @Resource
+    private RedissonClient redissonClient;
+
     private static final DefaultRedisScript<Long> SECKILL_SCRIPT;
 
     private static final String SECKILL_ORDER_TOPIC = "seckill-order";
 
+    private static final String SECKILL_ORDERS_READY_QUEUE = "seckill:orders:ready";
+
+    private static final long ORDER_TIMEOUT_MINUTES = 15L;
+
     private static final long KAFKA_SEND_TIMEOUT = 5L;
+
+    private RBlockingQueue<String> readyQueue;
 
     static {
         SECKILL_SCRIPT = new DefaultRedisScript<>();
         SECKILL_SCRIPT.setLocation(new ClassPathResource("seckill.lua"));
         SECKILL_SCRIPT.setResultType(Long.class);
+    }
+
+    @javax.annotation.PostConstruct
+    public void init() {
+        readyQueue = redissonClient.getBlockingQueue(SECKILL_ORDERS_READY_QUEUE);
+        redissonClient.getDelayedQueue(readyQueue);
     }
 
     @Override
@@ -79,11 +97,15 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         String message = userId + ":" + voucherId + ":" + orderId;
         kafkaTemplate.send(SECKILL_ORDER_TOPIC, message)
                 .addCallback(
-                        success -> log.info("Kafka消息发送成功，orderId: {}", orderId),
+                        success -> {
+                            log.info("Kafka消息发送成功，orderId: {}", orderId);
+                            // 5.写入Redisson延迟队列，15分钟后投递到就绪队列
+                            redissonClient.getDelayedQueue(readyQueue).offer(message, ORDER_TIMEOUT_MINUTES, TimeUnit.MINUTES);
+                        },
                         failure -> log.error("Kafka消息发送失败，orderId: {}, message: {}", orderId, message, failure)
                 );
 
-        // 5.返回订单id（异步发送，不阻塞用户）
+        // 6.返回订单id（异步发送，不阻塞用户）
         return Result.ok(orderId);
     }
 
@@ -130,6 +152,15 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
             log.error("处理订单异常，不提交offset，message: {}", message, e);
             // 不调用acknowledge，offset不会提交，消息会被重新消费
         }
+    }
+
+    @Override
+    public boolean restoreStock(Long voucherId) {
+        return seckillVoucherService.update()
+                .setSql("stock = stock + 1")
+                .eq("voucher_id", voucherId)
+                .ge("stock", 0)
+                .update();
     }
 
 }
