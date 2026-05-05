@@ -32,7 +32,9 @@ logging:
 hmdp:
   cache:
     voucher-list:
-      mode: mysql
+      mode: caffeine
       refresh-after-write: 5s
       expire-after-write: 10m
       redis-ttl: 30m
+      # 逻辑过期时间,用于解决缓存击穿问题(Redis Key永不过期,数据携带逻辑过期时间)
+      logical-expire-time: 10m
