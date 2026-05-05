@@ -9,22 +9,16 @@ import com.hmdp.service.ISeckillVoucherService;
 import com.hmdp.service.IVoucherOrderService;
 import com.hmdp.utils.UserHolder;
 import lombok.extern.slf4j.Slf4j;
-import org.redisson.api.RLock;
-import org.redisson.api.RedissonClient;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.kafka.support.SendResult;
 import org.springframework.kafka.support.Acknowledgment;
-import org.springframework.util.concurrent.ListenableFuture;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
 import java.util.Collections;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 /**
  * <p>
@@ -40,9 +34,6 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
 
     @Resource
     private ISeckillVoucherService seckillVoucherService;
-
-    @Resource
-    private RedissonClient redissonClient;
 
     @Resource
     private StringRedisTemplate stringRedisTemplate;
@@ -84,64 +75,40 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
             return Result.fail(r == 1 ? "库存不足" : "不能重复下单");
         }
 
-        // 4.同步发送Kafka消息，确保至少发送一次（等待ACK确认）
+        // 4.异步发送Kafka消息（acks=all + retries=3 保证不丢失）
         String message = userId + ":" + voucherId + ":" + orderId;
-        try {
-            ListenableFuture<SendResult<String, String>> future = kafkaTemplate.send(SECKILL_ORDER_TOPIC, message);
-            // 同步等待发送结果，确保消息已写入Kafka
-            SendResult<String, String> sendResult = future.get(KAFKA_SEND_TIMEOUT, TimeUnit.SECONDS);
-            log.info("Kafka消息发送成功，topic: {}, partition: {}, offset: {}",
-                    sendResult.getRecordMetadata().topic(),
-                    sendResult.getRecordMetadata().partition(),
-                    sendResult.getRecordMetadata().offset());
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            log.error("Kafka消息发送被中断，message: {}", message, e);
-            return Result.fail("订单创建失败，请稍后重试");
-        } catch (ExecutionException | TimeoutException e) {
-            log.error("Kafka消息发送失败，message: {}", message, e);
-            return Result.fail("订单创建失败，请稍后重试");
-        }
+        kafkaTemplate.send(SECKILL_ORDER_TOPIC, message)
+                .addCallback(
+                        success -> log.info("Kafka消息发送成功，orderId: {}", orderId),
+                        failure -> log.error("Kafka消息发送失败，orderId: {}, message: {}", orderId, message, failure)
+                );
 
-        // 5.返回订单id
+        // 5.返回订单id（异步发送，不阻塞用户）
         return Result.ok(orderId);
     }
 
-    private void createVoucherOrder(Long userId, Long voucherId, Long orderId) {
-        // 创建锁对象
-        RLock redisLock = redissonClient.getLock("lock:order:" + userId);
-        // 尝试获取锁
-        boolean isLock = redisLock.tryLock();
-        // 判断
-        if (!isLock) {
-            log.error("处理订单异常，不允许重复下单！");
-            return;
-        }
-
+    @Transactional(rollbackFor = Exception.class)
+    public void createVoucherOrder(Long userId, Long voucherId, Long orderId) {
         try {
-            // 1.扣减MySQL库存（乐观锁）
+            // 1.创建订单（订单ID为主键，天然幂等，重复插入会失败）
+            VoucherOrder voucherOrder = new VoucherOrder();
+            voucherOrder.setId(orderId);
+            voucherOrder.setUserId(userId);
+            voucherOrder.setVoucherId(voucherId);
+            save(voucherOrder);
+
+            // 2.扣减MySQL库存（乐观锁）
             boolean success = seckillVoucherService.update()
                     .setSql("stock = stock - 1")
                     .eq("voucher_id", voucherId).gt("stock", 0)
                     .update();
             if (!success) {
-                log.error("库存扣减失败，库存不足或已售罄，voucherId: {}", voucherId);
-                return;
-            }
-
-            // 2.创建订单（订单ID为主键，天然幂等，重复插入会失败）
-            VoucherOrder voucherOrder = new VoucherOrder();
-            voucherOrder.setId(orderId);
-            voucherOrder.setUserId(userId);
-            voucherOrder.setVoucherId(voucherId);
-            boolean saveResult = save(voucherOrder);
-            if (!saveResult) {
-                log.warn("订单已存在，重复消费，orderId: {}", orderId);
-                return;
+                throw new RuntimeException("库存扣减失败，库存不足或已售罄，voucherId: " + voucherId);
             }
             log.info("订单创建成功，orderId: {}", orderId);
-        } finally {
-            redisLock.unlock();
+        } catch (Exception e) {
+            log.error("处理订单异常，orderId: {}, voucherId: {}, userId: {}", orderId, voucherId, userId, e);
+            throw e;
         }
     }
 
