@@ -95,15 +95,16 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
 
         // 4.异步发送Kafka消息（acks=all + retries=3 保证不丢失）
         String message = userId + ":" + voucherId + ":" + orderId;
-        kafkaTemplate.send(SECKILL_ORDER_TOPIC, message)
-                .addCallback(
-                        success -> {
-                            log.info("Kafka消息发送成功，orderId: {}", orderId);
-                            // 5.写入Redisson延迟队列，15分钟后投递到就绪队列
-                            redissonClient.getDelayedQueue(readyQueue).offer(message, ORDER_TIMEOUT_MINUTES, TimeUnit.MINUTES);
-                        },
-                        failure -> log.error("Kafka消息发送失败，orderId: {}, message: {}", orderId, message, failure)
-                );
+
+//        kafkaTemplate.send(SECKILL_ORDER_TOPIC, message)
+//                .addCallback(
+//                        success -> {
+//                            log.info("Kafka消息发送成功，orderId: {}", orderId);
+//                            // 5.写入Redisson延迟队列，15分钟后投递到就绪队列
+//                            redissonClient.getDelayedQueue(readyQueue).offer(message, ORDER_TIMEOUT_MINUTES, TimeUnit.MINUTES);
+//                        },
+//                        failure -> log.error("Kafka消息发送失败，orderId: {}, message: {}", orderId, message, failure)
+//                );
 
         // 6.返回订单id（异步发送，不阻塞用户）
         return Result.ok(orderId);
