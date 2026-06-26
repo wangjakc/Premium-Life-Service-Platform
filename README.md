@@ -94,24 +94,6 @@
 → 粉丝在关注页滚动分页查看
 ```
 
----
-
-## 数据库表
-
-| 表名 | 说明 |
-|------|------|
-| tb_user | 用户表 |
-| tb_user_info | 用户详情表 |
-| tb_shop | 商铺表 |
-| tb_shop_type | 商铺类型表 |
-| tb_blog | 探店笔记表 |
-| tb_blog_comments | 笔记评论表 |
-| tb_follow | 关注关系表 |
-| tb_voucher | 优惠券表 |
-| tb_seckill_voucher | 秒杀优惠券表 |
-| tb_voucher_order | 订单表 |
-
----
 
 ## 项目配置
 
@@ -120,15 +102,15 @@
 ```yaml
 spring:
   datasource:
-    url: jdbc:mysql://127.0.0.1:3306/hmdp
-    username: root
-    password: 1234
+    url: 
+    username:
+    password: 
   redis:
-    host: 127.0.0.1
-    port: 6379
-    password: 123321
+    host: 
+    port: 
+    password: 
   kafka:
-    bootstrap-servers: 127.0.0.1:9092
+    bootstrap-servers: 
 ```
 
 ---
