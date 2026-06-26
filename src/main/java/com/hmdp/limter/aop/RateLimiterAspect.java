@@ -46,11 +46,6 @@ public class RateLimiterAspect {
         LIMIT_SCRIPT.setResultType(Long.class);
     }
 
-    /**
-     * 标记是否正在使用本地限流（用于日志打印，避免重复）
-     */
-    private volatile boolean usingLocalFallback = false;
-
     @PostConstruct
     public void init() {
         log.info("RateLimiterAspect 初始化完成");
@@ -80,27 +75,18 @@ public class RateLimiterAspect {
                     log.warn("Redis限流拦截，key: {}", fullKey);
                     throw new RateLimitException(rateLimiter.message());
                 }
-                // 限流通过
-                if (usingLocalFallback) {
-                    log.info("Redis 已恢复，切换回 Redis 限流");
-                    usingLocalFallback = false;
-                }
+                redisHealthChecker.recordSuccess();
                 return;
             } catch (RateLimitException e) {
                 throw e;
             } catch (Exception e) {
-                // Redis 限流异常，降级到本地限流
+                // Redis 调用失败，由熔断器自动统计失败率，达到阈值后自动 OPEN
+                redisHealthChecker.recordFailure();
                 log.error("Redis 限流异常，降级到本地限流，key: {}, error: {}", fullKey, e.getMessage());
-                redisHealthChecker.setRedisAvailable(false);
             }
         }
 
-        // ========== 降级：本地限流 ==========
-        if (!usingLocalFallback) {
-            log.warn("Redis 不可用，切换到本地限流降级方案");
-            usingLocalFallback = true;
-        }
-
+        // ========== 降级：本地限流（熔断器 OPEN 或 Redis 调用失败后） ==========
         boolean allowed = localRateLimiter.tryAcquire(fullKey, (int) limit, (int) window);
         if (!allowed) {
             log.warn("本地限流拦截，key: {}", fullKey);

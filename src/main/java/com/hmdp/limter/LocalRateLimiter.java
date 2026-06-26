@@ -20,7 +20,7 @@ public class LocalRateLimiter {
             .build();
 
     public boolean tryAcquire(String key, int limit, int windowSeconds) {
-        RateLimiter limiter = limiters.get(key, k -> RateLimiter.create(limit));
+        RateLimiter limiter = limiters.get(key, k -> RateLimiter.create(limit,windowSeconds, TimeUnit.SECONDS));
         return limiter.tryAcquire();
     }
 }

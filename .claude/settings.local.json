@@ -1,7 +1,17 @@
 {
   "permissions": {
     "allow": [
-      "Bash(mvn compile *)"
+      "Bash(mvn compile *)",
+      "Bash(systeminfo)",
+      "Bash(findstr /B /C:\"OS Name\" /C:\"OS Version\" /C:\"Processor\")",
+      "Bash(wmic cpu *)",
+      "Bash(wmic path *)",
+      "Bash(cmd.exe /c \"systeminfo | findstr /B /C:\\\\\"OS Name\\\\\" /C:\\\\\"OS Version\\\\\" /C:\\\\\"Processor\\\\\"\")",
+      "Bash(powershell.exe -Command \"Get-CimInstance Win32_OperatingSystem | Select-Object Caption,Version; Get-CimInstance Win32_Processor | Select-Object Name,NumberOfCores,NumberOfLogicalProcessors\")",
+      "Bash(powershell.exe -Command \"Get-CimInstance Win32_VideoController | Select-Object Name,AdapterRAM,DriverVersion\")",
+      "Bash(powershell.exe -Command \"Get-CimInstance Win32_OperatingSystem | Format-List Caption,Version,BuildNumber,OSArchitecture; Get-CimInstance Win32_Processor | Format-List Name,NumberOfCores,NumberOfLogicalProcessors,MaxClockSpeed\")",
+      "Bash(powershell.exe -Command 'Get-CimInstance Win32_PhysicalMemory | ForEach-Object { [math]::Round\\($_.Capacity/1GB,2\\) } | Measure-Object -Sum | ForEach-Object { '\\\\''Total RAM: '\\\\'' + [math]::Round\\($_.Sum,2\\) + '\\\\'' GB'\\\\'' }')",
+      "Bash(powershell.exe -Command \"Get-CimInstance Win32_DiskDrive | Format-Table Model,Size -AutoSize\")"
     ]
   }
 }
